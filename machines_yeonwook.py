@@ -9,6 +9,7 @@ class P1():
         self.pieces = [(i, j, k, l) for i in range(2) for j in range(2) for k in range(2) for l in range(2)]  # All 16 pieces
         self.board = board # Include piece indices. 0:empty / 1~16:piece
         self.available_pieces = available_pieces # Currently available pieces in a tuple type (e.g. (1, 0, 1, 0))
+        self.eval_board = np.zeros((4, 4), dtype=int)
     
     def select_piece(self):
         # Make your own algorithm here
@@ -17,8 +18,7 @@ class P1():
         if(self.board.max()):
             #row = self.evaluate_position() // 4
             #col = self.evaluate_position() % 4
-
-            return random.choice(self.available_pieces)
+            return self.evaluate_piece()
         # 첫 선택이면 그냥 무조건 ENFJ를 준다    
         else:
             return (1,0,1,1) #ENFJ
@@ -33,8 +33,15 @@ class P1():
             pos = self.evaluate_position(selected_piece)
             row = pos // 4
             col = pos % 4
+            value = [0]
             if(pos != 16) :
-                return(row, col)
+                for r in range(1,3):
+                    for c in range(1,3):
+                        if(self.eval_board[r][c]>max(value)):
+                            value.append(self.eval_board[r][c])
+                        if(self.eval_board[row][col] != 0 and self.eval_board[row][col] <= max(value)):
+                            return (r,c) # 중앙에 빈자리가 있으면 먼저 선점
+                return (row, col)
             else :
                 return random.choice(available_locs)
 
@@ -58,7 +65,7 @@ class P1():
                 sym.append(u_val[0])
                 quantity.append(count[0])
             
-        return(tuple(sym), max(quantity))
+        return(sym, max(quantity)) # 겹치느게 없으면 quantity는 0이다
 
 
     #멤버변수 리셋하는 함수
@@ -108,58 +115,41 @@ class P1():
         # 눈여겨 봐야할 특성,갯수가 들어간다
                 
                 
-    #여기 다시 해봐야할 듯
+    
     def evaluate_piece(self):
-        # self.check_possibilities()
-        # self.eval_board = np.zeros((4, 4), dtype=int)
-        # available_locs = [(row, col) for row, col in product(range(4), range(4)) if self.board[row][col]==0]
-        # evaluate_position과 비슷하게 하나, eval 변수에
-        # eval_vals = np.ravel(np.array([self.row_eval, self.col_eval, self.cross_eval, self.subgrid_eval]))
-        # sym들을 확인해서
-        # row_most_pos =  np.where(np.array(self.row_eval) == max())[0].tolist()
-        # col_most_pos =  np.where(np.array(self.col_eval) == max(max_col))[0].tolist()
         self.check_possibilities()  # 필드 평가를 통해 가능한 승리 조건 분석
-        worst_case_score = float('inf')  # 최악의 경우 점수를 추적
-        best_piece = None  # 최적의 말을 저장
+    
+        # 빈 위치 찾기
+        available_locs = [
+            (row, col) for row, col in product(range(4), range(4)) if self.board[row][col] == 0
+        ]
         
+        # 각 남은 조각에 대해 승리 가능성 평가
+        eval_results = []
         for piece in self.available_pieces:
-            simulated_scores = []  # 해당 말을 기준으로 시뮬레이션한 점수 저장
+            score = 0
             
-            for loc in [(row, col) for row in range(4) for col in range(4) if self.board[row][col] == 0]:
+            # 각 빈 위치에 해당 조각을 놓았을 때 평가
+            for loc in available_locs:
                 row, col = loc
-                
-                # 말을 놓아본다 (가상의 시뮬레이션)
-                self.board[row][col] = self.pieces.index(piece) + 1
-                
-                # 상대가 놓을 수 있는 모든 경우에 대한 최적의 결과 평가
-                max_score = -float('inf')  # 해당 시뮬레이션에서 상대의 최적 점수
-                for opp_piece in self.available_pieces:
-                    for opp_loc in [(r, c) for r in range(4) for c in range(4) if self.board[r][c] == 0]:
-                        r, c = opp_loc
-                        
-                        # 상대 말을 놓아본다 (가상 시뮬레이션)
-                        self.board[r][c] = self.pieces.index(opp_piece) + 1
-                        
-                        # 승리 가능성 평가
-                        score = self.calculate_board_score()
-                        max_score = max(max_score, score)
-                        
-                        # 상대 말을 지운다
-                        self.board[r][c] = 0
-                
-                # 점수 저장 후 현재 말을 지운다
-                simulated_scores.append(max_score)
-                self.board[row][col] = 0
+                self.board[row][col] = self.available_pieces.index(piece) + 1  # 임시로 조각 배치
+                score += self.eval_board[row][col]
+                self.board[row][col] = 0  # 원상 복구
             
-            # 상대가 가장 잘 했을 때의 최악의 결과 저장
-            best_simulated_score = max(simulated_scores) if simulated_scores else 0
-            if best_simulated_score < worst_case_score:
-                worst_case_score = best_simulated_score
-                best_piece = piece
+            eval_results.append((piece, score))
         
-        # 최적의 말을 반환
-        return best_piece
-
+        # 최고 점수를 가진 조각 탐색
+        best_piece, max_score = max(eval_results, key=lambda x: x[1])
+        
+        # 선택 기준에 따라 반환
+        if max_score >= 2:
+            # max_score가 2 이상인 경우, 상대가 가장 두고 싶어하지 않을 조각 반환
+            selected_piece = min(eval_results, key=lambda x: x[1])[0]
+        else:
+            # max_score가 2 미만인 경우, 적당한 조각 반환
+            selected_piece = best_piece
+        
+        return selected_piece         
 
 
     # 위험한 곳의 위치를 파악하고 내가 갖고 있는 piece가 어디 들어가면 좋은지 확인
@@ -198,9 +188,10 @@ class P1():
                 _, count = self.check_possibility([self.board[i][3-i] for i in range(4)])
                 pos_list.append(count)
 
-                subgrid = [self.board[r][c], self.board[r][c+1], self.board[r+1][c], self.board[r+1][c+1]]
-                _, count = self.check_possibility(subgrid)
-                pos_list.append(count)
+                if(r<=2 and c <=2):
+                    subgrid = [self.board[r][c], self.board[r][c+1], self.board[r+1][c], self.board[r+1][c+1]]
+                    _, count = self.check_possibility(subgrid)
+                    pos_list.append(count)
 
                 if max(pos_list) == 4:
                     return (4*r + c)
@@ -210,8 +201,11 @@ class P1():
         # row,col또는 row,cross 또는 col,cross에서 모두 eval 변수가 2인 순간 거의 게임 끝남
         # 이건 max값이 2인 경우니까 내가 두고 다음 차례에 4가 되지 않게 하는 말이 남았으면
         # 그 위치의 eval_board에 1을 더하고, 아니면 다음걸 평가한다.
-        elif(max(max_vals) == 2):
-
+        # elif(max(max_vals) == 2):
+        # eval값들이 2이하인 경우 eval_board를 일단 업데이트 한 후
+        # eval값들이 2가 아닌 경우(아마 게임 초반) 겹치는 부분이
+        # 가장 많은 위치를 return => place_piece에서 중앙부분에 더 좋은게 있는지 한번 찾는다
+        else: 
             if(max_row == 2):
                 for row_pos in row_most_pos:
                     for i in range(4):
@@ -298,33 +292,31 @@ class P1():
                                         self.board[r][c] = 0
                                 self.board[r][c] = 0
 
-        else :
-            #selected piece랑 가장 유사한곳에 둔다
-            max_val = max(max_vals)
-            for loc in available_locs:
-                r,c = loc
-                pos_list = []
-                self.board[r][c] = self.pieces.index(selected_piece) + 1
-                _, count = self.check_possibility([self.board[r][col] for col in range(4)])
-                pos_list.append(count)
-                _, count = self.check_possibility([self.board[row][c] for row in range(4)])
-                pos_list.append(count)
-                _, count = self.check_possibility([self.board[i][i] for i in range(4)])
-                pos_list.append(count)
-                _, count = self.check_possibility([self.board[i][3-i] for i in range(4)])
-                pos_list.append(count)
+            if(max(max_vals) < 2) :
+                #selected piece랑 가장 유사한곳에 둔다
+                max_val = max(max_vals)
+                for loc in available_locs:
+                    r,c = loc
+                    pos_list = []
+                    self.board[r][c] = self.pieces.index(selected_piece) + 1
+                    _, count = self.check_possibility([self.board[r][col] for col in range(4)])
+                    pos_list.append(count)
+                    _, count = self.check_possibility([self.board[row][c] for row in range(4)])
+                    pos_list.append(count)
+                    _, count = self.check_possibility([self.board[i][i] for i in range(4)])
+                    pos_list.append(count)
+                    _, count = self.check_possibility([self.board[i][3-i] for i in range(4)])
+                    pos_list.append(count)
 
-                subgrid = [self.board[r][c], self.board[r][c+1], self.board[r+1][c], self.board[r+1][c+1]]
-                _, count = self.check_possibility(subgrid)
-                pos_list.append(count)
-                self.board[r][c] = 0
+                    subgrid = [self.board[r][c], self.board[r][c+1], self.board[r+1][c], self.board[r+1][c+1]]
+                    _, count = self.check_possibility(subgrid)
+                    pos_list.append(count)
+                    self.board[r][c] = 0
 
-                if max(pos_list) > max_val:
-                    return (4*r + c)
-                else :
-                    return 16 # 랜덤하게 그냥 둔다
-
-        
+                    if max(pos_list) > max_val:
+                        return (4*r + c)
+                    else :
+                        return 16 # 랜덤하게 그냥 둔다
 
         return np.argmax(self.eval_board) # 1차원 배열 형식으로 변경해 가장 큰 index 반환
     
