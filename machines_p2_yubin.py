@@ -44,19 +44,65 @@ class P2():
         return best_move  
     
 
+    # 승리 조건 확인 
+    def is_board_full(self):
+        for row in range(4):
+            for col in range(4):
+                if self.board[row][col] == 0:
+                    return False
+        return True
+
+    def check_line(self,line):
+        if 0 in line:
+            return False  # Incomplete line
+        characteristics = np.array([self.pieces[piece_idx - 1] for piece_idx in line])
+        for i in range(4):  # Check each characteristic (I/E, N/S, T/F, P/J)
+            if len(set(characteristics[:, i])) == 1:  # All share the same characteristic
+                return True
+        return False
+
+    def check_2x2_subgrid_win(self):
+        for r in range(3):
+            for c in range(3):
+                subgrid = [self.board[r][c], self.board[r][c+1], self.board[r+1][c], self.board[r+1][c+1]]
+                if 0 not in subgrid:  # All cells must be filled
+                    characteristics = [self.pieces[idx - 1] for idx in subgrid]
+                    for i in range(4):  # Check each characteristic (I/E, N/S, T/F, P/J)
+                        if len(set(char[i] for char in characteristics)) == 1:  # All share the same characteristic
+                            return True
+        return False
+
+    def check_win(self):
+        # Check rows, columns, and diagonals
+        for col in range(4):
+            if self.check_line([self.board[row][col] for row in range(4)]):
+                return True
+        
+        for row in range(4):
+            if self.check_line([self.board[row][col] for col in range(4)]):
+                return True
+            
+        if self.check_line([self.board[i][i] for i in range(4)]) or self.check_line([self.board[i][3 - i] for i in range(3)]):
+            return True
+
+        # Check 2x2 sub-grids
+        if self.check_2x2_subgrid_win():
+            return True
+        
+        return False
+    
+
     # minmax 알고리즘
     def minmax_ab(self, board, depth, is_maximizing, selected_piece, alpha, beta):
-        # main 에서 함수 임포트
-        from main import check_win, is_board_full
 
         # 종료 조건
-        if check_win():
+        if self.check_win():
             if is_maximizing: #내 턴일때
                 return 1  # 승리
             else:
                 return -1  # 패배
         
-        if is_board_full() or depth == 0:
+        if self.is_board_full() or depth == 0:
             return 0  # 무승부
 
         #최대화 시키는 플레이어의 턴
